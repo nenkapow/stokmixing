@@ -4,6 +4,7 @@ import { preview, rowsFromSheet } from './import.js';
 import { initOpname, machineLabel, responsibleName } from './opname.js';
 import { initFinac } from './finac-ui.js';
 import { renderDashboard } from './dashboard.js';
+import { renderAdminMachines, renderAdminProfiles } from './admin-master.js';
 const app = document.querySelector('#app');
 const url = import.meta.env.VITE_SUPABASE_URL, key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,11 +30,8 @@ else {
    content.innerHTML='<div class="page-heading"><div><span class="eyebrow">MASTER DATA / FINAC</span><h2>Master Material</h2><p>Kelola standar berat per zak untuk setiap material.</p></div></div><section class="panel"><div class="table-toolbar"><div><h3>Daftar material</h3><p>Material aktif dan standar kg per zak</p></div><input id="search" type="search" aria-label="Cari kode atau nama material" placeholder="Cari kode atau nama material"></div><div id="list"></div></section>';
    const list=()=>{const matches=data.filter(x=>(x.code+' '+x.name).toLowerCase().includes(document.querySelector('#search').value.toLowerCase()));document.querySelector('#list').innerHTML=`<div class="table-wrap"><table class="material-table"><thead><tr><th>KODE FINAC</th><th>NAMA MATERIAL</th><th>STATUS</th><th>STANDAR KG / ZAK</th><th></th></tr></thead><tbody>${matches.map((x,i)=>`<tr><td data-label="Kode FINAC"><strong>${esc(x.code)}</strong></td><td data-label="Nama material">${esc(x.name)}</td><td data-label="Status"><span class="badge ${x.active?'badge-active':'badge-neutral'}">${x.active?'Aktif':'Nonaktif'}</span></td><td data-label="Standar kg / zak"><input id="kg-${i}" aria-label="Standar kg per zak ${esc(x.code)}" type="number" min="0.001" step="any" value="${esc(x.kg_per_bag??'')}" placeholder="Belum diisi"></td><td data-label="Aksi"><button class="save-material secondary" data-index="${i}">Simpan</button></td></tr>`).join('')}</tbody></table></div>${matches.length?'':'<p class="empty-state">Material tidak ditemukan.</p>'}`;document.querySelectorAll('.save-material').forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.index),input=document.querySelector('#kg-'+i);if(!input.reportValidity())return;const v=input.value;const {error}=await db.from('materials').update({kg_per_bag:v===''?null:Number(v)}).eq('code',matches[i].code);message(error?.message||'Standar disimpan')})};document.querySelector('#search').oninput=list;list();return;
   }
-  if(page==='profiles' && role==='admin'){
-   const {data,error}=await db.from('profiles').select('id,role,display_name').order('role');if(error){message(error.message);return}
-   content.innerHTML=`<h2>Nama pengguna</h2><p>Atur nama yang ditampilkan pada pemeriksaan. Peran hanya dikelola melalui Supabase.</p>${data.map(p=>`<form class="item profile" data-id="${esc(p.id)}"><strong>${esc(responsibleName(p))}</strong><p>${esc(p.role)} · ID akhir ${esc(p.id.slice(-8))}</p><label>Nama tampilan<input name="display_name" maxlength="120" value="${esc(p.display_name??'')}" placeholder="Nama belum tersedia"></label><button>Simpan</button></form>`).join('')}`;
-   content.querySelectorAll('.profile').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const value=new FormData(f).get('display_name').trim();const {data:updated,error}=await db.from('profiles').update({display_name:value||null}).eq('id',f.dataset.id).select('id').maybeSingle();if(error)message(error.message);else if(!updated)message('Nama tidak tersimpan; akses atau profil tidak tersedia.');else{await show();message('Nama pengguna disimpan.')}});return;
-  }
+  if(page==='profiles' && role==='admin'){await renderAdminProfiles(db,content,message);return}
+  if(page==='machines' && role==='admin'){await renderAdminMachines(db,content,message);return}
   if(page==='machines'){
    const {data,error}=await db.from('machines').select('*').order('number');if(error){message(error.message);return}
    content.innerHTML=`<h2>Master Mesin</h2><input id="search" placeholder="Cari mesin">${role==='admin'?'<form id="new"><label>Nomor Mesin<input name="number" required></label><button>Tambah mesin</button></form>':''}<div id="list"></div>`;
