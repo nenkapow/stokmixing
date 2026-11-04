@@ -1,0 +1,2 @@
+import { test } from 'node:test'; import { strict as assert } from 'node:assert'; import { preview } from './import.js';
+test('impor: nol diterima, duplikat dan kerusakan ditandai',()=>{const p=preview([{code:'A',name:' mixing  WIP ok ',qty:0},{code:'A',name:'Mixing WIP OK',qty:2},{code:'',name:'Mixing WIP OK',qty:1},{code:'B',name:'Mixing WIP OK',qty:'rusak'},{code:'C',name:'Lain',qty:2}]);assert.equal(p.valid.length,1);assert.equal(p.duplicates.length,1);assert.equal(p.errors.length,2)});
