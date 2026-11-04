@@ -12,3 +12,10 @@ test('header FINAC XLSX dan nama lengkap dipertahankan', async () => {
  const rows = []; loaded.worksheets[0].eachRow({includeEmpty:false}, row => rows.push(row.values.slice(1)));
  assert.deepEqual(preview(rowsFromSheet(rows)).valid, [{code:'LP002',name:'LP002 30 gr Clear Base Mixing WIP OK'}]);
 });
+
+test('master menerima Mixing berwarna dan mempertahankan nama lengkap',()=>{
+ const names=['PT208 Base Mixing Blue WIP OK','PT206 Cover Mixing White WIP OK','PT207 Base Mixing Natural WIP OK','LP002 Clear Base Mixing WIP OK'];
+ const rows=names.map((name,i)=>({code:`K${i}`,name,qty:0}));
+ rows.push({code:'REJ',name:'Mixing WIP Reject',qty:1},{code:'INJ',name:'Injection WIP OK',qty:1});
+ const result=preview(rows);assert.deepEqual(result.valid.map(x=>x.name),names);assert.equal(result.errors.length,0);
+});

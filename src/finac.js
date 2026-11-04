@@ -1,11 +1,11 @@
 import Decimal from 'decimal.js';
 import {matchesMixing} from './calculation.js';
 import {machineLabel} from './opname.js';
-Decimal.set({precision:40,rounding:Decimal.ROUND_HALF_UP});
+Decimal.set({precision:80,rounding:Decimal.ROUND_HALF_UP});
 const numberPattern=/^-?\d+(?:\.\d+)?$/;
 function decimal(value,{required=false,nonnegative=false}={}){
- const str=String(value??'').trim(); if(!str){if(required)throw Error('Angka wajib diisi');return null}
- if(!numberPattern.test(str)||str.replace('-', '').split('.')[0].length>12||(str.split('.')[1]??'').length>6)throw Error('Angka tidak valid');
+ const str=typeof value==='number'&&Number.isFinite(value)?new Decimal(value).toFixed():String(value??'').trim(); if(!str){if(required)throw Error('Angka wajib diisi');return null}
+ if(!numberPattern.test(str)||str.replace('-', '').split('.')[0].length>18||(str.split('.')[1]??'').length>18)throw Error('Angka tidak valid');
  const d=new Decimal(str);if(nonnegative&&d.isNegative())throw Error('Angka tidak boleh negatif');return d.toFixed();
 }
 export function previewFinac(rows){

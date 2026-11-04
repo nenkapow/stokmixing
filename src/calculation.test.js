@@ -11,3 +11,8 @@ test('kategori Mixing WIP OK di dalam nama FINAC lengkap', () => {
  assert.equal(matchesMixing('LP002 Mixing WIP OKAY'), false);
  assert.equal(matchesMixing('LP002 Premixing WIP OK'), false);
 });
+
+test('menerima warna dan deskripsi di antara Mixing dan WIP OK',()=>{
+ for(const name of ['PT208 Base Mixing Blue WIP OK','PT206 Cover Mixing White WIP OK','PT207 Base Mixing Natural WIP OK','LP002 Clear Base Mixing WIP OK','mixing   navy blue  WIP  OK'])assert.equal(matchesMixing(name),true,name);
+ for(const name of ['Mixing WIP Reject','Injection WIP OK','Printing WIP OK','Crushing WIP OK','Mixing WIP Reject WIP OK'])assert.equal(matchesMixing(name),false,name);
+});

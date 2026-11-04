@@ -37,7 +37,7 @@ begin
  n:=jsonb_array_length(p_items);
  insert into public.finac_snapshots(session_id,version,filename,imported_by,material_count,qty_is_kg,cost_per_kg) values(p_session,next_version,trim(p_filename),auth.uid(),n,p_qty_is_kg,p_cost_per_kg) returning id into sid;
  for item in select * from jsonb_array_elements(p_items) loop
-  if nullif(trim(item->>'code'),'') is null or coalesce(item->>'name','') !~* '(^|[[:space:]])mixing[[:space:]]+wip[[:space:]]+ok($|[[:space:]])' or coalesce(item->>'system_qty','') !~ '^-?[0-9]{1,12}(\.[0-9]{1,6})?$' or (item->>'average_cost' is not null and item->>'average_cost' !~ '^[0-9]{1,12}(\.[0-9]{1,6})?$') or (item->>'total_value' is not null and item->>'total_value' !~ '^-?[0-9]{1,12}(\.[0-9]{1,6})?$') then raise exception 'Baris FINAC tidak valid'; end if;
+  if nullif(trim(item->>'code'),'') is null or coalesce(item->>'name','') !~* '(^|[[:space:]])mixing([[:space:]]+(?!wip([[:space:]]|$))[^[:space:]]+)*[[:space:]]+wip[[:space:]]+ok($|[[:space:]])' or coalesce(item->>'system_qty','') !~ '^-?[0-9]{1,18}(\.[0-9]{1,18})?$' or (item->>'average_cost' is not null and item->>'average_cost' !~ '^[0-9]{1,18}(\.[0-9]{1,18})?$') or (item->>'total_value' is not null and item->>'total_value' !~ '^-?[0-9]{1,18}(\.[0-9]{1,18})?$') then raise exception 'Baris FINAC tidak valid'; end if;
   insert into public.finac_snapshot_items(snapshot_id,code,name,system_qty,average_cost,total_value) values(sid,trim(item->>'code'),item->>'name',(item->>'system_qty')::numeric,(item->>'average_cost')::numeric,(item->>'total_value')::numeric);
  end loop;
  return sid;
