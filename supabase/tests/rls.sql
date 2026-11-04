@@ -7,6 +7,12 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
 insert into public.materials(code,name) values ('TEST-RLS','Mixing WIP OK');
 insert into public.machines(number,name) values ('TEST-RLS','Test');
+update public.materials set kg_per_bag = 20 where code = 'TEST-RLS';
+select public.import_materials('[{"code":"TEST-RLS","name":"LP002 30 gr Clear Base Mixing WIP OK"}]'::jsonb, 'test.xlsx');
+do $$ begin
+ if not exists (select 1 from public.materials where code = 'TEST-RLS' and name = 'LP002 30 gr Clear Base Mixing WIP OK' and kg_per_bag = 20) then raise exception 'Nama atau standar material berubah salah'; end if;
+ begin perform public.import_materials('[{"code":"REJ","name":"LP002 Mixing WIP Reject"}]'::jsonb, 'test.xlsx'); raise exception 'Kategori reject diterima'; exception when raise_exception then if sqlerrm <> 'Invalid material' then raise; end if; end;
+end $$;
 do $$ begin if not public.is_admin() then raise exception 'Admin tidak dikenali'; end if; end $$;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
 do $$ declare n int; begin

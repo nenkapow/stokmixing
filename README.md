@@ -15,7 +15,7 @@ Gunakan Node.js 22+, `npm ci`, salin `.env.example` ke `.env.local`, isi `VITE_S
 
 ## Impor
 
-Gunakan CSV UTF-8 dengan pemisah koma atau XLSX dengan header `code`, `name`, `qty` di baris pertama. Qty hanya divalidasi dan tidak disimpan sebagai kg. Benahi seluruh baris duplikat atau bermasalah sebelum konfirmasi. Standar kg/zak harus diisi manual; impor tidak mengubah standar yang sudah ada. Berkas perusahaan tidak boleh dikomit.
+Gunakan CSV UTF-8 dengan pemisah koma atau XLSX dengan header FINAC `Category`, `Description COA`, `Code`, `Name`, `Qty`, `Average`, `Total` di baris pertama (kolom wajib: `Code`, `Name`, `Qty`). Qty hanya divalidasi dan tidak disimpan sebagai kg. Benahi seluruh baris duplikat atau bermasalah sebelum konfirmasi. Standar kg/zak harus diisi manual; impor tidak mengubah standar yang sudah ada. Berkas perusahaan tidak boleh dikomit.
 
 ## GitHub Pages
 

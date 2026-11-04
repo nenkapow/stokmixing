@@ -28,8 +28,8 @@ begin
  if not public.is_admin() then raise exception 'Admin only' using errcode = '42501'; end if;
  if jsonb_typeof(items) <> 'array' or length(trim(source_filename)) = 0 then raise exception 'Invalid import'; end if;
  for item in select * from jsonb_array_elements(items) loop
-  if length(trim(coalesce(item->>'code',''))) = 0 or lower(regexp_replace(trim(coalesce(item->>'name','')), '\s+', ' ', 'g')) <> 'mixing wip ok' then raise exception 'Invalid material'; end if;
-  insert into public.materials(code,name) values(trim(item->>'code'), 'Mixing WIP OK') on conflict(code) do update set name=excluded.name, active=true, updated_at=now();
+  if length(trim(coalesce(item->>'code',''))) = 0 or coalesce(item->>'name','') !~* '(^|[[:space:]])mixing[[:space:]]+wip[[:space:]]+ok($|[[:space:]])' then raise exception 'Invalid material'; end if;
+  insert into public.materials(code,name) values(trim(item->>'code'), item->>'name') on conflict(code) do update set name=excluded.name, active=true, updated_at=now();
   n := n + 1;
  end loop;
  insert into public.material_imports(imported_by,filename,imported_count) values(auth.uid(),left(source_filename,255),n);
