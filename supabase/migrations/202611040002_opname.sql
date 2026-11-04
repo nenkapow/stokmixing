@@ -1,4 +1,5 @@
 -- Apply after 202611040001_foundation.sql in the dedicated project only.
+begin;
 create table public.opname_sessions (
  id bigint generated always as identity primary key,
  name text not null check (length(trim(name)) > 0), opname_date date not null,
@@ -56,7 +57,7 @@ end $$;
 create function public.opname_claim(p_id bigint) returns void language plpgsql security definer set search_path='' as $$
 declare m public.opname_machines;
 begin
- if not exists(select 1 from public.profiles where id=auth.uid()) then raise exception 'Akun tidak diizinkan'; end if;
+ if not exists(select 1 from public.profiles where id=auth.uid() and role='mandor') then raise exception 'Hanya Mandor yang dapat mengklaim mesin' using errcode='42501'; end if;
  m:=public.opname_lock_machine(p_id);
  if m.mandor_id is null then update public.opname_machines set mandor_id=auth.uid(),started_at=now() where id=p_id;
  elsif m.mandor_id <> auth.uid() then raise exception 'Mesin sudah diklaim pengguna lain';
@@ -92,7 +93,18 @@ create function public.opname_reopen(p_id bigint) returns void language plpgsql 
 declare m public.opname_machines;
 begin if not public.is_admin() then raise exception 'Hanya Admin'; end if; m:=public.opname_lock_machine(p_id); if m.status <> 'COMPLETED' then raise exception 'Mesin belum selesai'; end if; update public.opname_machines set status='DRAFT',completed_at=null where id=p_id; end $$;
 create function public.opname_close(p_id bigint) returns void language plpgsql security definer set search_path='' as $$
-begin if not public.is_admin() then raise exception 'Hanya Admin'; end if; update public.opname_sessions set status='CLOSED' where id=p_id and status='OPEN'; if not found then raise exception 'Sesi tidak terbuka'; end if; end $$;
+declare current_status text; unfinished bigint;
+begin
+ if not public.is_admin() then raise exception 'Hanya Admin'; end if;
+ -- The same session row is locked first by all machine mutations.
+ select status into current_status from public.opname_sessions where id=p_id for update;
+ if current_status is distinct from 'OPEN' then raise exception 'Sesi tidak terbuka'; end if;
+ select count(*) into unfinished from public.opname_machines where session_id=p_id and status <> 'COMPLETED';
+ if unfinished > 0 then raise exception 'Sesi belum dapat ditutup: % mesin belum selesai', unfinished; end if;
+ update public.opname_sessions set status='CLOSED' where id=p_id;
+end $$;
 revoke all on function public.opname_lock_machine(bigint) from public, anon, authenticated;
 revoke all on function public.opname_create_session(text,date), public.opname_claim(bigint), public.opname_save_item(bigint,text,integer,numeric,numeric,bigint), public.opname_delete_item(bigint,bigint), public.opname_complete(bigint), public.opname_reopen(bigint), public.opname_close(bigint) from public, anon;
 grant execute on function public.opname_create_session(text,date), public.opname_claim(bigint), public.opname_save_item(bigint,text,integer,numeric,numeric,bigint), public.opname_delete_item(bigint,bigint), public.opname_complete(bigint), public.opname_reopen(bigint), public.opname_close(bigint) to authenticated;
+
+commit;
