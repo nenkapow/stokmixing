@@ -1,6 +1,7 @@
 import './style.css';
 import { createClient } from '@supabase/supabase-js';
 import { preview, rowsFromSheet } from './import.js';
+import { initOpname } from './opname.js';
 const app = document.querySelector('#app');
 const url = import.meta.env.VITE_SUPABASE_URL, key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -12,10 +13,11 @@ else {
   const {data:{session}}=await db.auth.getSession();
   if(!session){app.innerHTML='<main><h1>Opname Mixing</h1><p>Stock opname mingguan Injection</p><form id="login"><label>Email<input name="email" type="email" required></label><label>Kata sandi<input name="password" type="password" required></label><button>Masuk</button></form><p id="message" role="alert"></p></main>';document.querySelector('#login').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)message(error.message);else render()};return;}
   const {data:profile,error}=await db.from('profiles').select('role').eq('id',session.user.id).maybeSingle(); role=profile?.role;
-  app.innerHTML=`<main><header><h1>Opname Mixing</h1><button id="logout" class="secondary">Keluar</button></header><p>${role?'Peran: '+esc(role):'Akun belum diizinkan.'}</p><nav>${role?'<button data-page="home">Beranda</button><button data-page="machines">Mesin</button>':''}${role==='admin'?'<button data-page="materials">Material</button><button data-page="import">Impor</button>':''}</nav><p id="message" role="alert">${esc(error?.message||'')}</p><section id="content"></section></main>`;
+  app.innerHTML=`<main><header><h1>Opname Mixing</h1><button id="logout" class="secondary">Keluar</button></header><p>${role?'Peran: '+esc(role):'Akun belum diizinkan.'}</p><nav>${role?'<button data-page="home">Beranda</button><button data-page="opname">'+(role==='admin'?'Stock Opname':'Mulai Stock Opname')+'</button><button data-page="machines">Mesin</button>':''}${role==='admin'?'<button data-page="materials">Material</button><button data-page="import">Impor</button>':''}</nav><p id="message" role="alert">${esc(error?.message||'')}</p><section id="content"></section></main>`;
   document.querySelector('#logout').onclick=async()=>{await db.auth.signOut();page='home';render()};document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;show()}); if(role)show();
  }
  async function show(){const content=document.querySelector('#content'); message('');
+  if(page==='opname'){const {data:{user}}=await db.auth.getUser();if(!user){render();return}initOpname(db,role,user.id,content,message);return}
   if(page==='home'){content.innerHTML='<h2>Beranda</h2><p>Pilih menu untuk mengelola data master.</p>';return}
   if(page==='materials' && role==='admin'){
    const {data,error}=await db.from('materials').select('*').order('code');if(error){message(error.message);return}
