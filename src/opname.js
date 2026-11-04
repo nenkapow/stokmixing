@@ -1,19 +1,48 @@
 import { matchesMixing } from './calculation.js';
+export function numericValues(whole, open, hopper) {
+ const values=[whole,open,hopper].map(v=>{
+  if (v === null || v === undefined) throw Error('Masukkan angka yang valid.');
+  const text=String(v).trim();
+  if (text === '') return 0;
+  const n=Number(text);
+  if (!Number.isFinite(n) || n<0) throw Error('Masukkan angka nonnegatif yang valid.');
+  return n;
+ });
+ if (!Number.isSafeInteger(values[0])) throw Error('Zak utuh harus berupa bilangan bulat.');
+ return values;
+}
 export function calculate(whole, standard, open, hopper) {
- if ([whole,open,hopper].some(v=>v===null || String(v).trim()==='' || !Number.isFinite(Number(v)) || Number(v)<0) || !Number.isSafeInteger(Number(whole))) throw Error('Masukkan angka nonnegatif yang valid; zak utuh harus bulat.');
- if (Number(whole)>0 && (standard == null || !Number.isFinite(Number(standard)) || Number(standard)<=0)) throw Error('Minta Admin melengkapi standar kg per zak.');
- const result=Number(whole)*Number(standard||0)+Number(open)+Number(hopper);
+ const [bags, remaining, hopperKg]=numericValues(whole,open,hopper);
+ if (bags>0 && (standard == null || !Number.isFinite(Number(standard)) || Number(standard)<=0)) throw Error('Minta Admin melengkapi standar kg per zak.');
+ const result=bags*Number(standard||0)+remaining+hopperKg;
  if (!Number.isFinite(result)) throw Error('Jumlah terlalu besar.');
  return result;
 }
+export function machineLabel(number) {
+ const value=String(number ?? '').trim();
+ return /^mesin(?:\s|$)/i.test(value) ? value : `Mesin ${value}`;
+}
+export function initialItemValues(editing) {
+ const show=v => v == null || Number(v) === 0 ? '' : String(v);
+ return {whole:show(editing?.whole_bags),open:show(editing?.open_kg),hopper:show(editing?.hopper_kg)};
+}
+export function itemsByMachine(items) {
+ const grouped=new Map();
+ for(const item of items){if(!grouped.has(item.opname_machine_id))grouped.set(item.opname_machine_id,[]);grouped.get(item.opname_machine_id).push(item)}
+ return grouped;
+}
+export function responsibleName(profile) { return profile?.display_name?.trim() || 'Nama mandor belum tersedia'; }
 export function summarize(machines,items) {
  const completed=new Map(machines.filter(m=>m.status==='COMPLETED').map(m=>[m.id,m]));
  const grouped=new Map();
- for(const item of items){const machine=completed.get(item.opname_machine_id);if(!machine)continue;let row=grouped.get(item.material_code);if(!row){row={code:item.material_code,name:item.material_name,total:0,locations:[]};grouped.set(item.material_code,row)} row.total+=Number(item.actual_kg);row.locations.push({machine:`${machine.machine_number} — ${machine.machine_name}`,kg:Number(item.actual_kg)});}
+ for(const item of items){const machine=completed.get(item.opname_machine_id);if(!machine)continue;let row=grouped.get(item.material_code);if(!row){row={code:item.material_code,name:item.material_name,total:0,locations:[]};grouped.set(item.material_code,row)} row.total+=Number(item.actual_kg);row.locations.push({machine:machineLabel(machine.machine_number),kg:Number(item.actual_kg)});}
  return {total:machines.length,completed:completed.size,unfinished:machines.length-completed.size,materials:[...grouped.values()].sort((a,b)=>a.code.localeCompare(b.code))};
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const format=n=>new Intl.NumberFormat('id-ID',{maximumFractionDigits:3}).format(n);
+export function itemInputs(values) {
+ return `<label>Zak utuh<input name="whole" type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${esc(values.whole)}"></label><label>Sisa zak terbuka (kg)<input name="open" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${esc(values.open)}"></label><label>Estimasi visual hopper (kg)<input name="hopper" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${esc(values.hopper)}"></label>`;
+}
 export function initOpname(db,role,userId,content,message){
  let selectedSession=null, selectedMachine=null, material=null, editing=null, materials=[];
  const rpc=async(name,args)=>{const {data,error}=await db.rpc(name,args);if(error)throw error;return data};
@@ -30,14 +59,20 @@ export function initOpname(db,role,userId,content,message){
  async function machines(){
   const sessionsNow=await get(db.from('opname_sessions').select('*').eq('id',selectedSession.id));if(!sessionsNow.length)throw Error('Sesi tidak lagi tersedia'); selectedSession=sessionsNow[0];
   const list=await get(db.from('opname_machines').select('*').eq('session_id',selectedSession.id).order('machine_number'));
+  const ids=list.map(m=>m.id);
+  // RLS returns all results to admins and only owned results to mandor.
+  const visibleItems=ids.length?await get(db.from('opname_items').select('opname_machine_id,material_code,material_name,actual_kg').in('opname_machine_id',ids)):[];
+  const grouped=itemsByMachine(visibleItems);
+  const profiles=role==='admin'?await get(db.from('profiles').select('id,display_name')):[];
+  const names=new Map(profiles.map(p=>[p.id,p]));
   const done=list.filter(m=>m.status==='COMPLETED').length;
   content.innerHTML=`<button id="back" class="secondary">← Daftar sesi</button><h2>${esc(selectedSession.name)}</h2><p>${esc(selectedSession.opname_date)} · ${esc(selectedSession.status)}</p><p>Total mesin: ${list.length} · Selesai: ${done} · Belum selesai: ${list.length-done}</p>${role==='admin'?'<button id="recap">Rekap</button>':''}${role==='admin'&&selectedSession.status==='OPEN'?'<button id="close" class="secondary">Tutup sesi</button>':''}<input id="machine-search" placeholder="Cari mesin"><div id="machine-list"></div>`;
   btn('back',sessions);btn('recap',recap);btn('close',async()=>{if(done<list.length){message(`Sesi belum dapat ditutup: ${list.length-done} mesin belum selesai.`);return}if(!confirm('Tutup sesi? Penghitungan tidak dapat diubah lagi.'))return;await rpc('opname_close',{p_id:selectedSession.id});message('Sesi ditutup.');await machines()});
-  const draw=()=>{const q=content.querySelector('#machine-search').value.toLowerCase();content.querySelector('#machine-list').innerHTML=list.filter(m=>(m.machine_number+' '+m.machine_name).toLowerCase().includes(q)).map(m=>{const state=!m.mandor_id?'Belum diperiksa':m.status==='COMPLETED'?'Selesai':'Draft';return `<div class="item"><strong>${esc(m.machine_number)} — ${esc(m.machine_name)}</strong><p>${state}${m.mandor_id?' · Penanggung jawab: '+esc(m.mandor_id):''}</p>${selectedSession.status==='OPEN' && ((role==='mandor' && (!m.mandor_id||m.mandor_id===userId)&&m.status==='DRAFT') || (role==='admin' && m.status==='COMPLETED'))?`<button class="machine-action" data-id="${m.id}">${role==='admin'?'Buka ulang':m.mandor_id?'Lanjutkan':'Mulai'}</button>`:''}</div>`}).join('');content.querySelectorAll('.machine-action').forEach(el=>el.onclick=async()=>{try{const m=list.find(x=>x.id===Number(el.dataset.id));if(role==='admin'){if(!confirm('Buka ulang pemeriksaan mesin ini?'))return;await rpc('opname_reopen',{p_id:m.id});message('Pemeriksaan dibuka kembali.');await machines()}else{await rpc('opname_claim',{p_id:m.id});selectedMachine=m;await machine()}}catch(e){fail(e)}})};content.querySelector('#machine-search').oninput=draw;draw();
+  const draw=()=>{const q=content.querySelector('#machine-search').value.toLowerCase();content.querySelector('#machine-list').innerHTML=list.filter(m=>machineLabel(m.machine_number).toLowerCase().includes(q)).map(m=>{const state=!m.mandor_id?'Belum diperiksa':m.status==='COMPLETED'?'Selesai':'Draft';return `<div class="item"><strong>${esc(machineLabel(m.machine_number))}</strong><p>${state}${role==='admin'&&m.mandor_id?' · Penanggung jawab: '+esc(responsibleName(names.get(m.mandor_id))):''}</p>${(grouped.get(m.id)||[]).map(i=>`<p>${esc(i.material_code)} · ${esc(i.material_name)}<br>Total: ${format(i.actual_kg)} kg</p>`).join('')}${selectedSession.status==='OPEN' && ((role==='mandor' && (!m.mandor_id||m.mandor_id===userId)&&m.status==='DRAFT') || (role==='admin' && m.status==='COMPLETED'))?`<button class="machine-action" data-id="${m.id}">${role==='admin'?'Buka ulang':m.mandor_id?'Lanjutkan':'Mulai'}</button>`:''}</div>`}).join('');content.querySelectorAll('.machine-action').forEach(el=>el.onclick=async()=>{try{const m=list.find(x=>x.id===Number(el.dataset.id));if(role==='admin'){if(!confirm('Buka ulang pemeriksaan mesin ini?'))return;await rpc('opname_reopen',{p_id:m.id});message('Pemeriksaan dibuka kembali.');await machines()}else{await rpc('opname_claim',{p_id:m.id});selectedMachine=m;await machine()}}catch(e){fail(e)}})};content.querySelector('#machine-search').oninput=draw;draw();
  }
  async function machine(){
   const list=await get(db.from('opname_items').select('*').eq('opname_machine_id',selectedMachine.id).order('created_at'));
-  content.innerHTML=`<button id="back" class="secondary">← Daftar mesin</button><h2>${esc(selectedMachine.machine_number)} — ${esc(selectedMachine.machine_name)}</h2><p>Draft · ${list.length} material</p><button id="add">Tambah material</button>${list.length?'':'<p>Belum ada material. Anda dapat menyelesaikan pemeriksaan sebagai kosong.</p>'}${list.map(i=>`<div class="item"><strong>${esc(i.material_code)} · ${esc(i.material_name)}</strong><p>${format(i.actual_kg)} kg · ${i.whole_bags} zak + ${format(i.open_kg)} kg terbuka + ${format(i.hopper_kg)} kg hopper</p><button class="edit" data-id="${i.id}">Edit</button> <button class="delete secondary" data-id="${i.id}">Hapus</button></div>`).join('')}<button id="complete" class="wide">Selesai Periksa Mesin</button>`;
+  content.innerHTML=`<button id="back" class="secondary">← Daftar mesin</button><h2>${esc(machineLabel(selectedMachine.machine_number))}</h2><p>Draft · ${list.length} material</p><button id="add">Tambah material</button>${list.length?'':'<p>Belum ada material. Anda dapat menyelesaikan pemeriksaan sebagai kosong.</p>'}${list.map(i=>`<div class="item"><strong>${esc(i.material_code)} · ${esc(i.material_name)}</strong><p>${format(i.actual_kg)} kg · ${i.whole_bags} zak + ${format(i.open_kg)} kg terbuka + ${format(i.hopper_kg)} kg hopper</p><button class="edit" data-id="${i.id}">Edit</button> <button class="delete secondary" data-id="${i.id}">Hapus</button></div>`).join('')}<button id="complete" class="wide">Selesai Periksa Mesin</button>`;
   btn('back',machines);btn('add',choose);btn('complete',async()=>{if(!confirm(list.length?'Selesaikan pemeriksaan mesin ini?':'Konfirmasi mesin kosong dan selesaikan pemeriksaan?'))return;await rpc('opname_complete',{p_id:selectedMachine.id});message('Pemeriksaan selesai.');await machines()});
   content.querySelectorAll('.edit').forEach(el=>el.onclick=async()=>{try{editing=list.find(i=>i.id===Number(el.dataset.id));const current=editing.kg_per_bag==null?await get(db.from('materials').select('kg_per_bag').eq('code',editing.material_code).single()):null;material={code:editing.material_code,name:editing.material_name,kg_per_bag:editing.kg_per_bag??current?.kg_per_bag};form()}catch(e){fail(e)}});
   content.querySelectorAll('.delete').forEach(el=>el.onclick=async()=>{if(!confirm('Hapus material ini?'))return;try{await rpc('opname_delete_item',{p_machine:selectedMachine.id,p_item:Number(el.dataset.id)});message('Material dihapus.');await machine()}catch(e){fail(e)}});
@@ -50,10 +85,10 @@ export function initOpname(db,role,userId,content,message){
  function form(){
   const key=`opname:${userId}:${selectedMachine.id}:${editing?.id||'new:'+material.code}`;
   let draft;try{draft=JSON.parse(sessionStorage.getItem(key))}catch{};
-  const values=draft||{whole:editing?.whole_bags??0,open:editing?.open_kg??0,hopper:editing?.hopper_kg??0};
-  content.innerHTML=`<button id="back" class="secondary">← Pemeriksaan</button><h2>${esc(material.code)}</h2><p>${esc(material.name)}</p><p>Standar: ${material.kg_per_bag==null?'Belum diisi Admin':esc(material.kg_per_bag)+' kg/zak'}</p><form id="item-form"><label>Zak utuh<input name="whole" type="number" inputmode="numeric" min="0" step="1" required value="${esc(values.whole)}"></label><label>Sisa zak terbuka (kg)<input name="open" type="number" inputmode="decimal" min="0" step="any" required value="${esc(values.open)}"></label><label>Estimasi visual hopper (kg)<input name="hopper" type="number" inputmode="decimal" min="0" step="any" required value="${esc(values.hopper)}"></label><p>Total aktual: <strong id="total">—</strong> kg</p><button>Simpan Material</button></form><p>Input sementara tersimpan di tab ini jika jaringan bermasalah.</p>`;
-  btn('back',machine);const f=content.querySelector('#item-form');const update=()=>{const d=Object.fromEntries(new FormData(f));try{sessionStorage.setItem(key,JSON.stringify(d))}catch{}try{content.querySelector('#total').textContent=format(calculate(d.whole,material.kg_per_bag,d.open,d.hopper))}catch{content.querySelector('#total').textContent='—'}};f.oninput=update;update();
-  f.onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(f));try{calculate(d.whole,material.kg_per_bag,d.open,d.hopper);const submit=f.querySelector('button');submit.disabled=true;try{await rpc('opname_save_item',{p_machine:selectedMachine.id,p_code:material.code,p_whole:Number(d.whole),p_open:Number(d.open),p_hopper:Number(d.hopper),p_item:editing?.id??null});sessionStorage.removeItem(key);message('Material tersimpan.');await machine()}finally{submit.disabled=false}}catch(e){fail(e)}};
+  const values=draft||initialItemValues(editing);
+  content.innerHTML=`<button id="back" class="secondary">← Pemeriksaan</button><h2>${esc(material.code)}</h2><p>${esc(material.name)}</p><p>Standar: ${material.kg_per_bag==null?'Belum diisi Admin':esc(material.kg_per_bag)+' kg/zak'}</p><form id="item-form">${itemInputs(values)}<p>Total aktual: <strong id="total">—</strong> kg</p><button>Simpan Material</button></form><p>Input sementara tersimpan di tab ini jika jaringan bermasalah.</p>`;
+  btn('back',machine);const f=content.querySelector('#item-form');const update=()=>{const d=Object.fromEntries(new FormData(f));try{sessionStorage.setItem(key,JSON.stringify(d))}catch{}try{if([...f.elements].some(el=>el.validity?.badInput))throw Error('Angka tidak valid');content.querySelector('#total').textContent=format(calculate(d.whole,material.kg_per_bag,d.open,d.hopper))}catch{content.querySelector('#total').textContent='—'}};f.oninput=update;update();
+  f.onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(f));try{if([...f.elements].some(el=>el.validity?.badInput))throw Error('Angka tidak valid');calculate(d.whole,material.kg_per_bag,d.open,d.hopper);const submit=f.querySelector('button');submit.disabled=true;try{await rpc('opname_save_item',{p_machine:selectedMachine.id,p_code:material.code,p_whole:Number(d.whole),p_open:Number(d.open),p_hopper:Number(d.hopper),p_item:editing?.id??null});sessionStorage.removeItem(key);message('Material tersimpan.');await machine()}finally{submit.disabled=false}}catch(e){fail(e)}};
  }
  async function recap(){
   const machinesList=await get(db.from('opname_machines').select('*').eq('session_id',selectedSession.id));const ids=machinesList.filter(m=>m.status==='COMPLETED').map(m=>m.id);const items=ids.length?await get(db.from('opname_items').select('*').in('opname_machine_id',ids)):[];const report=summarize(machinesList,items);
