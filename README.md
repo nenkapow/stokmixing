@@ -1,6 +1,6 @@
-# Opname Mixing — Milestone 1A
+# STOCKMIX
 
-Aplikasi Vite untuk master material dan mesin Injection. Belum siap produksi; sesi dan input opname belum tersedia.
+Aplikasi stock opname material Injection. Validasi database dan alur operasional tetap diperlukan sebelum penggunaan produksi.
 
 ## Pengembangan
 
@@ -46,3 +46,15 @@ Migrasi kompatibilitas `supabase/migrations/202611040005_mixing_compatibility.sq
 Sebelum deployment frontend, tinjau dan terapkan `supabase/migrations/202611050006_master_insert_only.sql` setelah 001–005. Preview membandingkan seluruh kode master, termasuk yang nonaktif; data lama tidak diubah. Jumlah hasil adalah baris yang benar-benar ditambahkan dan dapat lebih kecil dari preview jika impor lain berjalan bersamaan. Uji di database Supabase yang dapat dibuang dengan `psql "$DATABASE_URL" -f supabase/tests/master_insert_only.sql`; tes bersamaan menggunakan `OPNAME_ALLOW_DESTRUCTIVE_TEST=yes SUPABASE_TEST_DATABASE_URL=... bash supabase/tests/concurrent_master_import.sh` dan membuat data sintetis sementara. Jangan menjalankan tes tersebut pada database produksi.
 
 Impor master mengenali satu baris ringkasan pada akhir file FINAC jika Code dan Name kosong, kolom identitas lain kosong atau berlabel TOTAL/GRAND TOTAL, dan kolom angka memenuhi pola footer. Footer tanpa label memerlukan sedikitnya dua nilai numerik; baris ambigu tetap dilaporkan bermasalah. Nama atau kode berisi TOTAL tetap diperlakukan sebagai data, sehingga tidak dilewati otomatis. Periksa jumlah dan detail ringkasan pada preview sebelum impor.
+
+## Standar material dan harga PPIC
+
+Tinjau dan uji `202611050007_default_material_standard.sql` lalu `202611050008_ppic_price_reference.sql` pada database Supabase sementara setelah migrasi 001–006. Migrasi 007 mengisi 25 kg/zak hanya untuk material Mixing yang masih NULL dan memberi 25 pada material baru; standar opname yang sudah tersimpan tidak berubah. Jalankan `psql "$DATABASE_URL" -f supabase/tests/default_material_standard.sql` dan `psql "$DATABASE_URL" -f supabase/tests/ppic_price_reference.sql` setelah migrasi. Untuk menguji backfill 007 itu sendiri, mulai dengan database sementara yang hanya memiliki 001–006 lalu jalankan `psql "$DATABASE_URL" -f supabase/tests/default_standard_migration.sql`; skrip itu menerapkan 007 dan meninggalkan fixture sehingga **hanya untuk database yang dapat dibuang**. Tes konkurensi `OPNAME_ALLOW_DESTRUCTIVE_TEST=yes SUPABASE_TEST_DATABASE_URL=... bash supabase/tests/concurrent_ppic_prices.sh` juga hanya untuk database sementara.
+
+Admin memilih file XLSX, worksheet, dan tanggal sumber di Referensi Harga PPIC; nama berbeda harus diperiksa satu per satu, dan satuan serta perubahan harga harus dikonfirmasi. Nilai numerik Excel dipakai sesuai nilai sel; teks seperti `23.561` yang ambigu ditolak. Nomor kode yang disimpan Excel sebagai angka hanya diterima jika aman; kode dengan nol depan harus berupa teks. Harga yang sama tidak menambah versi. Di Rekonsiliasi, Admin menetapkan PPIC atau secara eksplisit memilih Average FINAC untuk membuat snapshot harga sesi. Pilihan dapat direvisi hanya selama sesi OPEN; harga yang hilang tetap kosong dan tidak otomatis memakai FINAC. Sesi CLOSED yang sudah ada saat migrasi dibekukan memakai harga FINAC yang sebelumnya terkonfirmasi untuk menjaga laporan lama. Jangan jalankan migrasi atau tes destruktif pada database pengguna secara otomatis.
+
+### Integritas versi harga sesi
+
+Impor FINAC baru membuat pilihan harga sesi sebelumnya tidak sinkron, baik sumber PPIC maupun FINAC. Harga lama tidak digunakan dan ekspor final diblokir sampai Admin menetapkan ulang sumber harga untuk snapshot FINAC terbaru. Penetapan ulang memeriksa versi yang dilihat Admin; sesi CLOSED menolak impor FINAC dan perubahan harga. Laporan membaca snapshot FINAC dan pilihan harga melalui satu RPC yang konsisten.
+
+Migrasi 008 pada branch ini diperbarui dengan asumsi **belum pernah diterapkan** pada database tujuan. Jika 008 sudah diterapkan pada database lain, jangan jalankan ulang file yang telah diubah: siapkan migrasi koreksi baru untuk database tersebut. Uji perubahan dan `supabase/tests/ppic_price_reference.sql` pada database sementara sebelum deployment.

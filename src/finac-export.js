@@ -6,7 +6,7 @@ function excelNumber(value){if(value==null)return null;const d=new Decimal(value
 function addRoundingNote(cell, value){if(value==null)return;const d=new Decimal(value),rounded=d.toSignificantDigits(15,Decimal.ROUND_HALF_UP);if(!d.eq(rounded))cell.note=`Nilai sumber tepat: ${d.toFixed()}. Angka Excel dibulatkan menjadi 15 digit signifikan; lihat sheet Presisi Sumber.`;}
 function numericFormat(value,money=false){if(value==null)return;const d=new Decimal(value).toSignificantDigits(15,Decimal.ROUND_HALF_UP);return money?'#,##0.00;[Red]-#,##0.00':d.decimalPlaces()>15?'0.##############E+00':'#,##0.###############;[Red]-#,##0.###############'}
 export async function buildWorkbook(report){
- const r=reconcile(report);if(!r.ready)throw Error('Ekspor belum siap: periksa snapshot, satuan, penyelesaian mesin, dan standar berbeda.');
+ const r=reconcile(report);if(r.pricesStale)throw Error('Snapshot harga tidak sesuai dengan FINAC terbaru; tetapkan kembali harga sebelum ekspor.');if(!r.ready)throw Error('Ekspor belum siap: periksa snapshot, satuan, penyelesaian mesin, dan standar berbeda.');
  const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();wb.creator='Stock Opname Injection';
  const sheet=wb.addWorksheet('Laporan PPIC',{pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
  sheet.addRow(['STOCK OPNAME BAHAN MIX MINGGUAN']);sheet.mergeCells('A1:K1');sheet.getCell('A1').font={bold:true,size:16};
@@ -31,8 +31,8 @@ export async function buildWorkbook(report){
  detail.columns.forEach((col,i)=>{col.width=[18,20,42,15,20,22,20,20,30][i]});detail.getRow(1).font={bold:true};detail.views=[{state:'frozen',ySplit:1}];
  for(let i=1;i<=detail.rowCount;i++)for(let j=1;j<=9;j++){const c=detail.getRow(i).getCell(j);c.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}}
  const audit=wb.addWorksheet('Presisi Sumber');
- audit.addRow(['Nilai desimal tepat sebagai teks; Total Price dan Nilai Selisih dibulatkan ke 2 desimal IDR.']);audit.addRow(['Kode','Nama','Material Cost','System Qty','Total Qty','Selisih','Total Price (IDR)','Nilai Selisih (IDR)']);
- for(const x of r.rows)audit.addRow([String(x.code),String(x.name),x.cost==null?'':String(x.cost),x.system==null?'':String(x.system),String(x.actual),x.delta==null?'':String(x.delta),x.totalPrice==null?'':String(x.totalPrice),x.differenceValue==null?'':String(x.differenceValue)]);
- audit.columns.forEach((col,i)=>{col.width=[20,42,30,30,30,30,30,30][i]});audit.getRow(2).font={bold:true};
+ audit.addRow(['Nilai desimal tepat sebagai teks; Total Price dan Nilai Selisih dibulatkan ke 2 desimal IDR.']);audit.addRow(['Kode','Nama','Material Cost','System Qty','Total Qty','Selisih','Total Price (IDR)','Nilai Selisih (IDR)','Sumber harga','Versi harga','ID versi','Snapshot FINAC','Versi FINAC','Waktu pilihan','Admin pilihan']);
+ for(const x of r.rows)audit.addRow([String(x.code),String(x.name),x.cost==null?'':String(x.cost),x.system==null?'':String(x.system),String(x.actual),x.delta==null?'':String(x.delta),x.totalPrice==null?'':String(x.totalPrice),x.differenceValue==null?'':String(x.differenceValue),String(x.priceSource??'Belum dipilih'),x.priceVersion??'',x.priceVersionId??'',report.price_selection?.finac_snapshot_id??'',report.price_selection?.finac_snapshot_version??'',String(report.price_selection?.selected_at??''),String(report.price_selection?.selected_by??'')]);
+ audit.columns.forEach((col,i)=>{col.width=[20,42,30,30,30,30,30,30,20,16,16,20,16,28,36][i]});audit.getRow(2).font={bold:true};
  wb.calcProperties.fullCalcOnLoad=true;return wb;
 }

@@ -4,12 +4,21 @@ begin;
 insert into auth.users(id,email) values ('50000000-0000-0000-0000-000000000001','finac-admin@example.invalid'),('50000000-0000-0000-0000-000000000002','finac-mandor@example.invalid');
 insert into public.profiles(id,role) values ('50000000-0000-0000-0000-000000000001','admin'),('50000000-0000-0000-0000-000000000002','mandor');
 insert into public.opname_sessions(name,opname_date,status,created_by) values ('FINAC-TEST-A',current_date,'CLOSED','50000000-0000-0000-0000-000000000001'),('FINAC-TEST-B',current_date,'CLOSED','50000000-0000-0000-0000-000000000001');
+update public.opname_sessions set status='OPEN' where name='FINAC-TEST-A';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','50000000-0000-0000-0000-000000000001',true);
 select id as session_a from public.opname_sessions where name='FINAC-TEST-A' \gset
 select id as session_b from public.opname_sessions where name='FINAC-TEST-B' \gset
 select public.finac_import_snapshot(:session_a,'a.csv',true,true,false,0,'[{"code":"X","name":"X Mixing WIP OK","system_qty":"0","average_cost":"2.5","total_value":"0"}]');
+reset role;
+update public.opname_sessions set status='CLOSED' where name='FINAC-TEST-A';
+update public.opname_sessions set status='OPEN' where name='FINAC-TEST-B';
+set local role authenticated;
 select public.finac_import_snapshot(:session_b,'b.csv',true,false,false,0,'[{"code":"X","name":"X Mixing WIP OK","system_qty":"9","average_cost":"3","total_value":"27"}]');
+reset role;
+update public.opname_sessions set status='CLOSED' where name='FINAC-TEST-B';
+update public.opname_sessions set status='OPEN' where name='FINAC-TEST-A';
+set local role authenticated;
 do $$ declare a bigint; b bigint; begin
  select id into a from public.opname_sessions where name='FINAC-TEST-A'; select id into b from public.opname_sessions where name='FINAC-TEST-B';
  if (public.finac_report(a)->'snapshot'->'items'->0->>'system_qty') <> '0' or (public.finac_report(b)->'snapshot'->'items'->0->>'system_qty') <> '9' then raise exception 'Snapshot sesi tercampur'; end if;
