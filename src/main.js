@@ -1,6 +1,6 @@
 import './style.css';
 import { createClient } from '@supabase/supabase-js';
-import { preview, rowsFromSheet } from './import.js';
+import { initMasterImport } from './master-import-ui.js';
 import { initOpname, machineLabel, responsibleName } from './opname.js';
 import { initFinac } from './finac-ui.js';
 import { renderDashboard } from './dashboard.js';
@@ -37,10 +37,7 @@ else {
    content.innerHTML=`<h2>Master Mesin</h2><input id="search" placeholder="Cari mesin">${role==='admin'?'<form id="new"><label>Nomor Mesin<input name="number" required></label><button>Tambah mesin</button></form>':''}<div id="list"></div>`;
    const list=()=>{const q=document.querySelector('#search').value.toLowerCase();document.querySelector('#list').innerHTML=data.filter(x=>machineLabel(x.number).toLowerCase().includes(q)).map(x=>role==='admin'?`<form class="item machine" data-id="${x.id}"><strong>${esc(machineLabel(x.number))}</strong><label>Nomor Mesin<input name="number" value="${esc(x.number)}" required></label><label><input type="checkbox" name="active" ${x.active?'checked':''}> Aktif</label><button>Simpan</button></form>`:`<div class="item">${esc(machineLabel(x.number))}</div>`).join('');document.querySelectorAll('.machine').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const d=new FormData(f);const {error}=await db.from('machines').update({number:d.get('number').trim(),active:d.has('active')}).eq('id',f.dataset.id);if(error)message(error.message);else show()})};document.querySelector('#search').oninput=list;list();const nf=document.querySelector('#new');if(nf)nf.onsubmit=async e=>{e.preventDefault();const d=new FormData(nf);const number=d.get('number').trim();const {error}=await db.from('machines').insert({number,name:machineLabel(number)});if(error)message(error.message);else show()};return;
   }
-  if(page==='import' && role==='admin'){
-   content.innerHTML='<h2>Impor FINAC</h2><p>Kolom wajib: code, name, qty. Qty hanya divalidasi, bukan dianggap kg.</p><input id="file" type="file" accept=".csv,.xlsx"><div id="result"></div>';
-   document.querySelector('#file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();let ws;if(file.name.toLowerCase().endsWith('.csv')){const text=await file.text();const lines=text.split(/\r?\n/).filter(Boolean);const parse=line=>{const a=[];let v='',quoted=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(quoted&&line[i+1]==='"'){v+='"';i++}else quoted=!quoted}else if(c===','&&!quoted){a.push(v);v=''}else v+=c}if(quoted)throw Error('CSV tidak valid');a.push(v);return a};var all=lines.map(parse)}else{await wb.xlsx.load(await file.arrayBuffer());ws=wb.worksheets[0];if(!ws)throw Error('Workbook kosong');var all=[];ws.eachRow({includeEmpty:false},r=>all.push(r.values.slice(1)))}const rows=rowsFromSheet(all);const p=preview(rows);document.querySelector('#result').innerHTML=`<p>Lolos: ${p.valid.length}; duplikat: ${p.duplicates.length}; bermasalah: ${p.errors.length}</p><p>${esc([...p.duplicates.map(x=>`Baris ${x.line}: duplikat ${x.code}`),...p.errors.map(x=>`Baris ${x.line}: ${x.reason}`)].join('; '))}</p><ul>${p.valid.map(x=>`<li>${esc(x.code)} — ${esc(x.name)}</li>`).join('')}</ul><button id="confirm" ${!p.valid.length||p.errors.length||p.duplicates.length?'disabled':''}>Konfirmasi impor</button>`;document.querySelector('#confirm').onclick=async()=>{const {error}=await db.rpc('import_materials',{items:p.valid,source_filename:file.name});message(error?.message||'Impor selesai');if(!error)document.querySelector('#confirm').disabled=true}}catch(err){message(err.message)}};
-  }
+  if(page==='import' && role==='admin'){initMasterImport(db,content,message);return}
  }
  render();
 }

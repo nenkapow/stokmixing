@@ -15,7 +15,7 @@ Gunakan Node.js 22+, `npm ci`, salin `.env.example` ke `.env.local`, isi `VITE_S
 
 ## Impor
 
-Gunakan CSV UTF-8 dengan pemisah koma atau XLSX dengan header FINAC `Category`, `Description COA`, `Code`, `Name`, `Qty`, `Average`, `Total` di baris pertama (kolom wajib: `Code`, `Name`, `Qty`). Qty hanya divalidasi dan tidak disimpan sebagai kg. Benahi seluruh baris duplikat atau bermasalah sebelum konfirmasi. Standar kg/zak harus diisi manual; impor tidak mengubah standar yang sudah ada. Berkas perusahaan tidak boleh dikomit.
+Gunakan CSV UTF-8 dengan pemisah koma atau XLSX dengan header FINAC `Category`, `Description COA`, `Code`, `Name`, `Qty`, `Average`, `Total` di baris pertama (kolom wajib: `Code`, `Name`, `Qty`). Qty tidak digunakan atau disimpan dalam master. Kode yang sudah terdaftar dilewati; duplikat identik dalam file dihitung dan dilewati, sedangkan konflik nama atau baris bermasalah perlu diperbaiki sebelum konfirmasi. Standar kg/zak harus diisi manual; impor tidak mengubah standar yang sudah ada. Berkas perusahaan tidak boleh dikomit.
 
 ## GitHub Pages
 
@@ -40,3 +40,7 @@ Admin memilih sesi pada menu Rekonsiliasi FINAC, mengimpor CSV UTF-8 atau XLSX d
 Ekspor final memerlukan snapshot dengan Qty terkonfirmasi KG, sedikitnya satu mesin, semua mesin selesai, dan standar kg/zak yang konsisten. Harga yang tidak dikonfirmasi atau tidak tersedia dibiarkan kosong; kode yang tidak ditemukan di FINAC diberi catatan dan selisih kosong. Kolom Pecahan mencakup hopper; sheet kedua menyimpan rincian hopper. Nilai rupiah dibulatkan dua desimal. Excel membatasi angka menjadi 15 digit signifikan: nilai numerik dibulatkan secara eksplisit dengan catatan sel dan nilai tepat tersedia sebagai teks di sheet Presisi Sumber. Total IDR dibulatkan ke dua desimal setelah perhitungan dengan nilai sumber. Hasil unduhan mengikuti spesifikasi kolom, belum dibandingkan dengan template PPIC asli. Jangan menyimpan file FINAC asli di repository.
 
 Migrasi kompatibilitas `supabase/migrations/202611040005_mixing_compatibility.sql` harus ditinjau dan dijalankan setelah migrasi 004; 001 dan 002 tidak diubah. Uji di database Supabase sementara dengan `psql "$DATABASE_URL" -f supabase/tests/mixing_compatibility.sql`. Nilai numerik XLSX impor mengikuti presisi file Excel; gunakan CSV untuk angka sumber yang memerlukan lebih dari 15 digit signifikan.
+
+## Impor master insert-only
+
+Sebelum deployment frontend, tinjau dan terapkan `supabase/migrations/202611050006_master_insert_only.sql` setelah 001–005. Preview membandingkan seluruh kode master, termasuk yang nonaktif; data lama tidak diubah. Jumlah hasil adalah baris yang benar-benar ditambahkan dan dapat lebih kecil dari preview jika impor lain berjalan bersamaan. Uji di database Supabase yang dapat dibuang dengan `psql "$DATABASE_URL" -f supabase/tests/master_insert_only.sql`; tes bersamaan menggunakan `OPNAME_ALLOW_DESTRUCTIVE_TEST=yes SUPABASE_TEST_DATABASE_URL=... bash supabase/tests/concurrent_master_import.sh` dan membuat data sintetis sementara. Jangan menjalankan tes tersebut pada database produksi.
