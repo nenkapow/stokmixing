@@ -6,7 +6,7 @@ function excelNumber(value){if(value==null)return null;const d=new Decimal(value
 function addRoundingNote(cell, value){if(value==null)return;const d=new Decimal(value),rounded=d.toSignificantDigits(15,Decimal.ROUND_HALF_UP);if(!d.eq(rounded))cell.note=`Nilai sumber tepat: ${d.toFixed()}. Angka Excel dibulatkan menjadi 15 digit signifikan; lihat sheet Presisi Sumber.`;}
 function numericFormat(value,money=false){if(value==null)return;const d=new Decimal(value).toSignificantDigits(15,Decimal.ROUND_HALF_UP);return money?'#,##0.00;[Red]-#,##0.00':d.decimalPlaces()>15?'0.##############E+00':'#,##0.###############;[Red]-#,##0.###############'}
 export async function buildWorkbook(report){
- const r=reconcile(report);if(!r.ready)throw Error('Ekspor belum siap: periksa snapshot, satuan, penyelesaian mesin, dan standar berbeda.');
+ const r=reconcile(report);if(r.pricesStale)throw Error('Snapshot harga tidak sesuai dengan FINAC terbaru; tetapkan kembali harga sebelum ekspor.');if(!r.ready)throw Error('Ekspor belum siap: periksa snapshot, satuan, penyelesaian mesin, dan standar berbeda.');
  const ExcelJS=(await import('exceljs')).default;const wb=new ExcelJS.Workbook();wb.creator='Stock Opname Injection';
  const sheet=wb.addWorksheet('Laporan PPIC',{pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
  sheet.addRow(['STOCK OPNAME BAHAN MIX MINGGUAN']);sheet.mergeCells('A1:K1');sheet.getCell('A1').font={bold:true,size:16};

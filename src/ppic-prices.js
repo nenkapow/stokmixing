@@ -12,14 +12,24 @@ export function ppicPrice(cell){
  if(/^\d+[.,]\d{1,18}$/.test(s))return priceValue(s.replace(',','.'));
  throw Error('Harga tidak valid atau ambigu');
 }
+const blank=value=>value==null||(typeof value==='string'&&value.trim()==='');
+const totalLabel=value=>typeof value==='string'&&/^(?:grand\s+)?total$/i.test(value.trim());
+const aggregateNumber=value=>typeof value==='number'?Number.isFinite(value):typeof value==='string'?/^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)$/.test(value.trim()):Boolean(value&&typeof value==='object'&&typeof value.result==='number'&&Number.isFinite(value.result));
 export function parsePpicSheet(sheet){
- let header=null,headerRow=0;
- sheet.eachRow({includeEmpty:false},(row,n)=>{if(header)return;const found={};row.eachCell((cell,col)=>{const label=norm(scalar(cell));if(headerMap[label])found[headerMap[label]]=col});if(['code','name','uom','price'].every(k=>found[k])){header=found;headerRow=n}});
+ let header=null,headerRow=0,aggregateColumns=[];
+ sheet.eachRow({includeEmpty:false},(row,n)=>{if(header)return;const found={},aggregates=[];row.eachCell((cell,col)=>{const label=norm(scalar(cell));if(headerMap[label])found[headerMap[label]]=col;if(['total price (idr)','total price','system qty','total qty','selisih'].includes(label))aggregates.push(col)});if(['code','name','uom','price'].every(k=>found[k])){header=found;headerRow=n;aggregateColumns=aggregates}});
  if(!header)throw Error('Header Code, Name, UoM, dan Material Cost tidak ditemukan.');
- const rows=[];sheet.eachRow({includeEmpty:false},(row,n)=>{if(n<=headerRow)return;const rawCode=scalar(row.getCell(header.code)),name=scalar(row.getCell(header.name)),uom=scalar(row.getCell(header.uom)),priceCell=row.getCell(header.price);
-  if((rawCode==null||String(rawCode).trim()==='')&&(name==null||String(name).trim()==='')&&(uom==null||String(uom).trim()==='')&&(priceCell.value==null||priceCell.value===''))return;
-  if((rawCode==null||String(rawCode).trim()==='')&&typeof name==='string'&&/^(grand\s+)?total$/i.test(name.trim()))return;
+ let lastPopulated=headerRow;sheet.eachRow({includeEmpty:false},(row,n)=>{if(n>headerRow){let populated=false;row.eachCell({includeEmpty:false},cell=>{if(!blank(scalar(cell)))populated=true});if(populated)lastPopulated=n}});
+ const rows=[];let seenMaterial=false;
+ sheet.eachRow({includeEmpty:false},(row,n)=>{if(n<=headerRow)return;const rawCode=scalar(row.getCell(header.code)),name=scalar(row.getCell(header.name)),uom=scalar(row.getCell(header.uom)),priceCell=row.getCell(header.price);
+  let populated=false;row.eachCell({includeEmpty:false},cell=>{if(!blank(scalar(cell)))populated=true});if(!populated)return;
+  // Only a terminal, explicitly labelled total with an aggregate in a separate
+  // report column is safe to discard; a code alone is never sufficient.
+  let labels=0,otherText=false;row.eachCell({includeEmpty:false},cell=>{const value=scalar(cell);if(blank(value))return;if(totalLabel(value))labels++;else if(!aggregateNumber(value))otherText=true});
+  const footer=n===lastPopulated&&seenMaterial&&labels>0&&(blank(rawCode)||totalLabel(rawCode))&&(blank(name)||totalLabel(name))&&blank(uom)&&!otherText&&aggregateColumns.some(col=>aggregateNumber(scalar(row.getCell(col))));
+  if(footer)return;
   let code='',price=null,error='';try{if(typeof rawCode==='number'){if(!Number.isSafeInteger(rawCode)||rawCode<0||String(rawCode).length>15)throw Error('Kode numerik tidak aman; simpan sebagai teks');const pattern=row.getCell(header.code).numFmt||'';if(/^0+$/.test(pattern)&&pattern.length>String(rawCode).length)throw Error('Kode berformat nol depan perlu verifikasi');code=String(rawCode)}else if(typeof rawCode==='string')code=rawCode.trim();else throw Error('Kode kosong atau tidak valid');if(!code)throw Error('Kode kosong');if(typeof name!=='string'||!name.trim())throw Error('Nama tidak valid');if(norm(uom)!=='kg')throw Error('Satuan bukan KG');price=ppicPrice(priceCell);if(price.replace('.','').length>36)throw Error('Presisi harga terlalu besar')}catch(e){error=e.message}
+  if(code&&typeof name==='string'&&name.trim()&&!totalLabel(code)&&!totalLabel(name))seenMaterial=true;
   rows.push({line:n,code,name:typeof name==='string'?name:'',uom:String(uom??''),price,error});
  });return rows;
 }
