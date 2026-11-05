@@ -4,7 +4,7 @@ begin;
 insert into auth.users(id,email) values ('60000000-0000-0000-0000-000000000001','mix-admin@example.invalid'),('60000000-0000-0000-0000-000000000002','mix-mandor@example.invalid');
 insert into public.profiles(id,role) values ('60000000-0000-0000-0000-000000000001','admin'),('60000000-0000-0000-0000-000000000002','mandor');
 insert into public.machines(number,name) values ('MIX-COMPAT-TEST','test');
-insert into public.materials(code,name,kg_per_bag) values ('MIX-COMPAT','LP002 Clear Base Mixing WIP OK',25);
+insert into public.materials(code,name,kg_per_bag) values ('MIX-COMPAT','PT208 Base Mixing Blue WIP OK',25);
 set local role authenticated;
 select set_config('request.jwt.claim.sub','60000000-0000-0000-0000-000000000001',true);
 do $$ begin

@@ -1,5 +1,5 @@
-import { test } from 'node:test'; import { strict as assert } from 'node:assert'; import { preview } from './import.js';
-test('impor: nol diterima, duplikat dan kerusakan ditandai',()=>{const p=preview([{code:'A',name:' mixing  WIP ok ',qty:0},{code:'A',name:'Mixing WIP OK',qty:2},{code:'',name:'Mixing WIP OK',qty:1},{code:'B',name:'Mixing WIP OK',qty:'rusak'},{code:'C',name:'Lain',qty:2}]);assert.equal(p.valid.length,1);assert.equal(p.duplicates.length,1);assert.equal(p.errors.length,2)});
+import { test } from 'node:test'; import { strict as assert } from 'node:assert'; import { preview, classifyMaterials } from './import.js';
+test('master mengabaikan Qty, menerima nol, dan menandai kode kosong atau duplikat',()=>{const p=preview([{code:'A',name:' mixing  WIP ok ',qty:0},{code:'A',name:'Mixing WIP OK',qty:2},{code:'',name:'Mixing WIP OK',qty:1},{code:'B',name:'Mixing WIP OK',qty:'rusak'},{code:'C',name:'Lain',qty:2}]);assert.equal(p.valid.length,2);assert.equal(p.duplicates.length,1);assert.equal(p.errors.length,1)});
 
 test('header FINAC XLSX dan nama lengkap dipertahankan', async () => {
  const { default: ExcelJS } = await import('exceljs');
@@ -19,3 +19,16 @@ test('master menerima Mixing berwarna dan mempertahankan nama lengkap',()=>{
  rows.push({code:'REJ',name:'Mixing WIP Reject',qty:1},{code:'INJ',name:'Injection WIP OK',qty:1});
  const result=preview(rows);assert.deepEqual(result.valid.map(x=>x.name),names);assert.equal(result.errors.length,0);
 });
+
+
+test('perbandingan master: impor pertama, berulang, dan lima kode baru',()=>{
+ const first=Array.from({length:3},(_,i)=>({code:'K'+i,name:'Mixing Blue WIP OK',qty:0}));
+ let p=classifyMaterials(first,[]);assert.equal(p.totalMixing,3);assert.equal(p.newMaterials.length,3);
+ const known=p.newMaterials.map(x=>x.code);p=classifyMaterials(first,known);assert.equal(p.newMaterials.length,0);assert.equal(p.existing.length,3);
+ const expanded=first.concat(Array.from({length:5},(_,i)=>({code:'N'+i,name:'Mixing White WIP OK'})));p=classifyMaterials(expanded,known);assert.equal(p.newMaterials.length,5);assert.equal(p.existing.length,3);
+});
+test('duplikat yang sama dilewati dan nama berbeda dikarantina',()=>{
+ const p=classifyMaterials([{code:'A',name:'Base Mixing Blue WIP OK'},{code:'A',name:' base mixing blue WIP OK '},{code:'B',name:'Cover Mixing White WIP OK'},{code:'B',name:'Cover Mixing Black WIP OK'},{code:'C',name:'Mixing WIP Reject'},{code:'D',name:'Injection WIP OK'},{code:'',name:'Mixing WIP OK'}],['A']);
+ assert.equal(p.totalMixing,5);assert.equal(p.duplicates.length,2);assert.equal(p.conflicts[0].code,'B');assert.deepEqual(p.conflicts[0].names,['Cover Mixing White WIP OK','Cover Mixing Black WIP OK']);assert.equal(p.existing.length,1);assert.equal(p.newMaterials.length,0);assert.equal(p.errors.length,1);
+});
+test('kode sama di kategori lain dengan nama berbeda dilaporkan konflik',()=>{const p=classifyMaterials([{code:'Z',name:'Mixing Blue WIP OK'},{code:'Z',name:'Injection WIP OK'}],[]);assert.equal(p.conflicts.length,1);assert.equal(p.newMaterials.length,0)});
