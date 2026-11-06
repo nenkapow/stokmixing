@@ -27,7 +27,7 @@ else {
  async function show(){const content=document.querySelector('#content');content.dataset.page=page; message('');
   if(page==='ppic' && role==='admin'){initPpic(db,content,message);return}
   if(page==='finac' && role==='admin'){initFinac(db,content,message);return}
-  if(page==='opname'){const {data:{user}}=await db.auth.getUser();if(!user){render();return}initOpname(db,role,user.id,content,message);return}
+  if(page==='opname'){const {data:{user}}=await db.auth.getUser();if(!user){render();return}initOpname(db,role,user.id,content,message,()=>navigate('home'));return}
   if(page==='home'){await renderDashboard(db,role,content,navigate);return}
   if(page==='materials' && role==='admin'){
    const {data,error}=await db.from('materials').select('*').order('code');if(error){message(error.message);return}
