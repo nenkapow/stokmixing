@@ -29,3 +29,37 @@ test('harga snapshot versi lama tidak dipakai atau diekspor setelah FINAC beruba
 });
 
 test('subtotal di tengah dan footer tanpa bukti agregat tetap diperiksa',()=>{const w=new ExcelJS.Workbook(),s=w.addWorksheet('Uji');s.addRow(['Code','Name','UoM','Material Cost','Total Price (IDR)']);s.addRow(['A','Mixing WIP OK','KG',10,20]);s.addRow(['TOTAL','','',null,20]);s.addRow(['B','Mixing Blue WIP OK','KG',10,20]);s.addRow(['GRAND TOTAL','','',null,null]);const rows=parsePpicSheet(s);assert.equal(rows.length,4);assert.match(rows[1].error,/Nama tidak valid/);assert.match(rows[3].error,/Nama tidak valid/)});
+
+test('fixture XLSX sintetis melewati header berulang dan pemisah tanpa menyembunyikan baris rusak',async()=>{
+ const wb=new ExcelJS.Workbook(),s=wb.addWorksheet('25 Sept 26');
+ for(let i=0;i<6;i++)s.addRow(['Judul laporan sintetis']);
+ const header=['Code','Name','UoM','Material Cost','Total Price (IDR)'];s.addRow(header);
+ s.addRow(['10620610114162','Material A Mixing WIP OK','KG',26283.105556740258,100]);
+ s.addRow(['Code','Name','UoM']);
+ const separator=s.addRow([]);separator.getCell(5).value=0;
+ s.addRow(['MISSING','Material B Mixing WIP OK','KG',12.34,10]);
+ s.addRow(['BAD','','KG',10,10]);
+ s.addRow(['','', '',{formula:'IF(A1="","",1)'},null]);
+ s.addRow(['TOTAL','','',null,110]);
+ const loaded=new ExcelJS.Workbook();await loaded.xlsx.load(await wb.xlsx.writeBuffer());const rows=parsePpicSheet(loaded.getWorksheet('25 Sept 26'));
+ assert.deepEqual(rows.map(r=>r.line),[8,11,12,13]);assert.deepEqual(rows.skipped,{header:1,separator:1,footer:1});assert.equal(rows[0].code,'10620610114162');assert.equal(rows[0].price,'26283.105556740258');assert.match(rows[2].error,/Nama tidak valid/);assert.ok(rows[3].error);
+});
+
+test('ringkasan konsisten dan impor sebagian harus dikonfirmasi bersama nama dan perubahan',async()=>{
+ const {summarizePpic,ppicImportRows,formatPpicPrice}=await import('./ppic-prices.js');
+ const m=[{code:'A',name:'Nama A'},{code:'B',name:'Nama B'}],old=[{code:'A',price:'20',version:4}],rows=[
+ {line:8,code:'A',name:'Nama A',price:'26283.105556740258',error:''},
+ {line:9,code:'B',name:'Nama lain',price:'5',error:''},
+ {line:10,code:'C',name:'Nama C',price:'6',error:''},
+ {line:11,code:'D',name:'',price:null,error:'Nama tidak valid'},
+ {line:12,code:'E',name:'E',price:'1',error:''},{line:13,code:'E',name:'E',price:'1',error:''}];
+ const classified=classifyPpic(rows,m,old),summary=summarizePpic(classified,{header:1,separator:1,footer:1});
+ assert.deepEqual(summary,{total:6,matched:2,newPrice:1,changed:1,same:0,notFound:1,nameReview:1,duplicates:2,invalid:1,skipped:{header:1,separator:1,footer:1}});
+ assert.equal(formatPpicPrice(rows[0].price),'Rp26.283,11/kg');assert.equal(rows[0].price,'26283.105556740258');
+ assert.throws(()=>ppicImportRows(classified),/sebagian/);assert.throws(()=>ppicImportRows(classified,{confirmPartial:true}),/perubahan/);assert.throws(()=>ppicImportRows(classified,{confirmPartial:true,confirmChanged:true}),/nama/i);
+ const result=ppicImportRows(classified,{confirmPartial:true,confirmChanged:true,confirmedNames:[9]});assert.deepEqual(result.map(x=>x.code),['A','B']);assert.equal(result[0].price,'26283.105556740258');assert.equal(result[0].expected_version,4);assert.equal(result[1].confirm_name,true);assert.equal(old[0].price,'20');assert.equal(old[0].version,4);
+});
+
+test('formula tanpa cache yang dapat diverifikasi tetap bermasalah',()=>{
+ const w=new ExcelJS.Workbook(),s=w.addWorksheet('Uji');s.addRow(['Code','Name','UoM','Material Cost']);const a=s.addRow([]);a.getCell(4).value={formula:'IF(1=1,"",1)',result:''};const b=s.addRow([]);b.getCell(4).value={formula:'IF(1=1,"",1)'};s.addRow(['A','Synthetic Mixing WIP OK','KG',5]);const rows=parsePpicSheet(s);assert.equal(rows.skipped.separator,0);assert.equal(rows[0].line,2);assert.ok(rows[0].error);assert.ok(rows[1].error);assert.equal(rows[2].code,'A');
+});
