@@ -20,3 +20,11 @@ test('tabel Admin membedakan mesin kosong, belum diperiksa, dan beberapa materia
  assert.match(html,/2 material · lihat detail/);assert.match(html,/Base Mixing WIP OK/);assert.match(html,/Cover Mixing WIP OK/);assert.match(html,/3,5 kg/);assert.match(html,/Kosong/);assert.match(html,/Belum diperiksa/);assert.equal((html.match(/Buka ulang/g)||[]).length,2);
  const closed=adminMachineTable(machines,grouped,new Map(),'CLOSED');assert.doesNotMatch(closed,/Buka ulang/);
 });
+
+test('rekap memisahkan mesin tidak jalan dari hasil pengukuran',async()=>{
+ const {summarize,adminMachineTable}=await import('./opname.js');
+ const machines=[{id:1,machine_number:'1',status:'COMPLETED',mandor_id:'u'},{id:2,machine_number:'2',status:'NOT_RUNNING',mandor_id:'u'}];
+ const items=[{opname_machine_id:1,material_code:'A',material_name:'Mixing WIP OK',actual_kg:'12.5'}];
+ const r=summarize(machines,items);assert.equal(r.completed,1);assert.equal(r.notRunning.length,1);assert.equal(r.unfinished,0);assert.equal(r.materials[0].total,12.5);
+ const html=adminMachineTable(machines,new Map(),new Map(),'OPEN');assert.match(html,/Tidak Jalan/);assert.match(html,/Tidak diukur/);assert.equal((html.match(/Buka ulang/g)||[]).length,2);
+});

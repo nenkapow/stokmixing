@@ -11,7 +11,7 @@ export async function buildWorkbook(report){
  const sheet=wb.addWorksheet('Laporan PPIC',{pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
  sheet.addRow(['STOCK OPNAME BAHAN MIX MINGGUAN']);sheet.mergeCells('A1:K1');sheet.getCell('A1').font={bold:true,size:16};
  sheet.addRow([`Periode: ${report.session.name} · Tanggal: ${report.session.opname_date}`]);sheet.mergeCells('A2:K2');
- sheet.addRow(['Pecahan mencakup hopper. Nilai >15 digit signifikan dibulatkan; lihat Presisi Sumber.']);sheet.mergeCells('A3:K3');
+ sheet.addRow([`Pecahan mencakup hopper. ${r.notRunning.length} mesin dinyatakan tidak jalan dan tidak diukur; rincian di sheet Detail Per Mesin. Nilai >15 digit signifikan dibulatkan; lihat Presisi Sumber.`]);sheet.mergeCells('A3:K3');
  sheet.addRow(['Code','Name','UoM','Material Cost','Total Price (IDR)','System Qty','Total Qty','Actual Qty - Zak','Actual Qty - Pecahan','Std Qty - Kg/Zak','Selisih']);
  let totalActual=new Decimal(0),totalPrice=new Decimal(0),totalSystem=new Decimal(0),totalDelta=new Decimal(0),hasPrice=true,hasSystem=true;
  for(const x of r.rows){const row=sheet.addRow([String(x.code),String(x.name),'KG',excelNumber(x.cost),excelNumber(x.totalPrice),excelNumber(x.system),excelNumber(x.actual),x.whole,excelNumber(new Decimal(x.open).plus(x.hopper).toFixed()),excelNumber(x.standard),excelNumber(x.delta)]);
@@ -28,11 +28,13 @@ export async function buildWorkbook(report){
  const detail=wb.addWorksheet('Detail Per Mesin',{pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}});
  detail.addRow(['Mesin','Kode Material','Nama Material','Zak Utuh','Standar KG/Zak','Sisa Zak Terbuka','Hopper Estimasi','Total Aktual','Nama Mandor']);
  for(const i of report.items){const row=detail.addRow([String(machineName(i)),String(i.code),String(i.name),Number(i.whole),excelNumber(i.standard),excelNumber(i.open),excelNumber(i.hopper),excelNumber(i.actual),String(i.mandor_name||'Nama mandor belum tersedia')]);for(const [col,value] of [[5,i.standard],[6,i.open],[7,i.hopper],[8,i.actual]]){addRoundingNote(row.getCell(col),value);row.getCell(col).numFmt=numericFormat(value)}}
+ if(r.notRunning.length){detail.addRow([]);detail.addRow([`PERNYATAAN TIDAK JALAN: ${r.notRunning.length} mesin tidak diukur secara fisik`]);detail.addRow(['Mesin','Status','Nama Mandor']);for(const m of r.notRunning)detail.addRow([String(machineName({machine_number:m.number})), 'Tidak Jalan',String(m.mandor_name||'Nama mandor belum tersedia')]);}
  detail.columns.forEach((col,i)=>{col.width=[18,20,42,15,20,22,20,20,30][i]});detail.getRow(1).font={bold:true};detail.views=[{state:'frozen',ySplit:1}];
  for(let i=1;i<=detail.rowCount;i++)for(let j=1;j<=9;j++){const c=detail.getRow(i).getCell(j);c.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}}
  const audit=wb.addWorksheet('Presisi Sumber');
  audit.addRow(['Nilai desimal tepat sebagai teks; Total Price dan Nilai Selisih dibulatkan ke 2 desimal IDR.']);audit.addRow(['Kode','Nama','Material Cost','System Qty','Total Qty','Selisih','Total Price (IDR)','Nilai Selisih (IDR)','Sumber harga','Versi harga','ID versi','Snapshot FINAC','Versi FINAC','Waktu pilihan','Admin pilihan']);
  for(const x of r.rows)audit.addRow([String(x.code),String(x.name),x.cost==null?'':String(x.cost),x.system==null?'':String(x.system),String(x.actual),x.delta==null?'':String(x.delta),x.totalPrice==null?'':String(x.totalPrice),x.differenceValue==null?'':String(x.differenceValue),String(x.priceSource??'Belum dipilih'),x.priceVersion??'',x.priceVersionId??'',report.price_selection?.finac_snapshot_id??'',report.price_selection?.finac_snapshot_version??'',String(report.price_selection?.selected_at??''),String(report.price_selection?.selected_by??'')]);
+ if(r.notRunning.length){audit.addRow([]);audit.addRow([`Cakupan: ${r.notRunning.length} mesin dinyatakan tidak jalan dan tidak diukur secara fisik. Lihat Detail Per Mesin.`]);}
  audit.columns.forEach((col,i)=>{col.width=[20,42,30,30,30,30,30,30,20,16,16,20,16,28,36][i]});audit.getRow(2).font={bold:true};
  wb.calcProperties.fullCalcOnLoad=true;return wb;
 }
