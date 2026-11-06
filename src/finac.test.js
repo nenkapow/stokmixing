@@ -26,3 +26,12 @@ test('nilai melebihi 15 digit signifikan dibulatkan di Excel dan dicatat tepat d
  const w=await buildWorkbook(d),bytes=await w.xlsx.writeBuffer(),loaded=new ExcelJS.Workbook();await loaded.xlsx.load(bytes);
  const sheet=loaded.worksheets[0],audit=loaded.worksheets[2];assert.equal(sheet.getCell('F5').value,1234567890123460);assert.equal(audit.getCell('D3').value,d.snapshot.items[0].system_qty);assert.equal(audit.getCell('C3').value,d.snapshot.items[0].average_cost);assert.ok(sheet.getCell('F5').note);
 });
+
+test('mesin tidak jalan ditangani tanpa membuat material fiktif',async()=>{
+ const d=base();d.machines[1].status='NOT_RUNNING';d.machines[1].number='26';d.machines[1].mandor_name='Mandor Uji';d.items=d.items.slice(0,1);
+ const r=reconcile(d);assert.equal(r.complete,true);assert.equal(r.notRunning.length,1);assert.equal(r.missingMachines,0);assert.equal(r.rows.find(x=>x.code==='A').actual,'25.3');
+ const wb=await buildWorkbook(d),bytes=await wb.xlsx.writeBuffer(),loaded=new ExcelJS.Workbook();await loaded.xlsx.load(bytes);
+ assert.match(loaded.worksheets[0].getCell('A3').value,/1 mesin dinyatakan tidak jalan/);
+ const detail=loaded.worksheets[1];assert.equal(detail.getCell('A6').value,'Mesin 26');assert.equal(detail.getCell('B6').value,'Tidak Jalan');assert.equal(detail.getCell('C6').value,'Mandor Uji');assert.equal(detail.getCell('D6').value,null);
+ assert.match(loaded.worksheets[2].getCell('A6').value,/tidak diukur secara fisik/);
+});
