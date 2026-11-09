@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 const norm=x=>String(x??'').trim().replace(/\s+/g,' ').toLowerCase();
-const headerMap={'code':'code','name':'name','uom':'uom','material cost':'price'};
+const headerMap={'code':'code','name':'name','uom':'uom','material cost':'price','harga material (rp/kg)':'price'};
 function scalar(cell){const v=cell?.value;if(v&&typeof v==='object'&&Array.isArray(v.richText))return v.richText.map(x=>x.text).join('');return v}
 function priceValue(value){const text=new Decimal(value).toFixed();if(!/^\d{1,18}(?:\.\d{1,18})?$/.test(text))throw Error('Presisi harga melebihi batas database');return text}
 export function ppicPrice(cell){
@@ -19,12 +19,12 @@ const totalLabel=value=>typeof value==='string'&&/^(?:grand\s+)?total$/i.test(va
 const aggregateNumber=value=>typeof value==='number'?Number.isFinite(value):typeof value==='string'?/^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?)$/.test(value.trim()):Boolean(value&&typeof value==='object'&&typeof value.result==='number'&&Number.isFinite(value.result));
 export function parsePpicSheet(sheet){
  let header=null,headerRow=0,aggregateColumns=[];
- sheet.eachRow({includeEmpty:false},(row,n)=>{if(header)return;const found={},aggregates=[];row.eachCell((cell,col)=>{const label=norm(scalar(cell));if(headerMap[label])found[headerMap[label]]=col;if(['total price (idr)','total price','system qty','total qty','selisih'].includes(label))aggregates.push(col)});if(['code','name','uom','price'].every(k=>found[k])){header=found;headerRow=n;aggregateColumns=aggregates}});
+ sheet.eachRow({includeEmpty:false},(row,n)=>{if(header)return;const found={},aggregates=[];row.eachCell((cell,col)=>{const label=norm(scalar(cell));if(headerMap[label])found[headerMap[label]]=col;if(['total price (idr)','total price','system qty','total qty','selisih','total nilai aktual (rp)','stok finac (kg)','total aktual (kg)','finac - aktual (kg)'].includes(label))aggregates.push(col)});if(['code','name','uom','price'].every(k=>found[k])){header=found;headerRow=n;aggregateColumns=aggregates}});
  if(!header)throw Error('Header Code, Name, UoM, dan Material Cost tidak ditemukan.');
  let lastPopulated=headerRow;sheet.eachRow({includeEmpty:false},(row,n)=>{if(n>headerRow){let populated=false;row.eachCell({includeEmpty:false},cell=>{if(!blank(scalar(cell)))populated=true});if(populated)lastPopulated=n}});
  const rows=[],skipped={header:0,separator:0,footer:0};let seenMaterial=false;
  sheet.eachRow({includeEmpty:true},(row,n)=>{if(n<=headerRow||n>lastPopulated)return;const rawCode=scalar(row.getCell(header.code)),name=scalar(row.getCell(header.name)),uom=scalar(row.getCell(header.uom)),priceCell=row.getCell(header.price);
-  if(norm(rawCode)==='code'&&norm(name)==='name'&&norm(uom)==='uom'&&(blankRelevant(scalar(priceCell))||norm(scalar(priceCell))==='material cost')){skipped.header++;return}
+  if(norm(rawCode)==='code'&&norm(name)==='name'&&norm(uom)==='uom'&&(blankRelevant(scalar(priceCell))||headerMap[norm(scalar(priceCell))]==='price')){skipped.header++;return}
   if([rawCode,name,uom,scalar(priceCell)].every(blankRelevant)){skipped.separator++;return}
   // Only a terminal, explicitly labelled total with an aggregate in a separate
   // report column is safe to discard; a code alone is never sufficient.
